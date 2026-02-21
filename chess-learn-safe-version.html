@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chess Moves — Learn to Play</title>
+
+  <!--
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  CONTENT SECURITY POLICY                                     ║
+    ║  Locks down everything the browser is allowed to do:         ║
+    ║  • No external scripts, stylesheets, images, or fonts        ║
+    ║  • No network connections (fetch, XHR, WebSockets)           ║
+    ║  • No iframes, plugins, or object embeds                     ║
+    ║  • No form submissions to any destination                    ║
+    ║  • No <base> tag redirection attacks                         ║
+    ║  • No Web Workers or Service Workers                         ║
+    ║  Only inline <style> and inline <script> are permitted,      ║
+    ║  which are the two blocks this file itself uses.             ║
+    ╚══════════════════════════════════════════════════════════════╝
+  -->
+  <meta http-equiv="Content-Security-Policy"
+    content="
+      default-src   'none';
+      script-src    'unsafe-inline';
+      style-src     'unsafe-inline';
+      img-src       'none';
+      font-src      'none';
+      connect-src   'none';
+      frame-src     'none';
+      object-src    'none';
+      media-src     'none';
+      worker-src    'none';
+      base-uri      'none';
+      form-action   'none';
+    "
+  />
+
+  <style>
+    /* ============================================================
+       DESIGN TOKENS
+       All visual constants in one place for easy theming.
+    ============================================================ */
+    :root {
+      --bg:             #F8F6F1;
+      --bg-card:        #FFFFFF;
+      --board-light:    #EFE4C8;
+      --board-dark:     #B8976A;
+      --board-shadow:   rgba(100, 70, 30, 0.25);
+      --piece-color:    #1C1C1C;
+
+      --accent:         #1C2B4A;
+      --accent-rgb:     28, 43, 74;
+
+      --dot-move:       rgba(59, 130, 246, 0.55);
+      --dot-capture:    rgba(239, 68, 68, 0.55);
+      --ring-move:      rgba(59, 130, 246, 0.85);
+      --ring-capture:   rgba(239, 68, 68, 0.85);
+      --arrow-move:     rgba(59, 130, 246, 0.75);
+      --arrow-capture:  rgba(239, 68, 68, 0.75);
+
+      --text-primary:   #1a1a18;
+      --text-secondary: #7a7060;
+      --border:         #E0D9CC;
+      --border-hover:   #C4B89A;
+
+      /* System font stacks — no external requests, works on every device */
+      --font-display:   Georgia, 'Times New Roman', Times, serif;
+      --font-ui:        system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+      /* Board cell size — responsive */
+      --cell: clamp(44px, 10vw, 64px);
+      --board-size: calc(var(--cell) * 8);
+    }
+
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 64px;
+      gap: 0;
+    }
+
+    /* ============================================================
+       HEADER
+    ============================================================ */
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 7vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      line-height: 1.1;
+    }
+
+    header h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    header p {
+      margin-top: 10px;
+      font-size: 0.9rem;
+      font-weight: 300;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================================
+       PIECE SELECTOR
+    ============================================================ */
+    .piece-selector {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 32px;
+      max-width: calc(var(--board-size) + 4px);
+      width: 100%;
+    }
+
+    .piece-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-card);
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      user-select: none;
+      flex: 1 1 72px;
+      min-width: 72px;
+      max-width: 100px;
+    }
+
+    .piece-card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      transform: translateY(-2px);
+    }
+
+    .piece-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12), 0 4px 16px rgba(0,0,0,0.1);
+      transform: translateY(-3px);
+    }
+
+    .piece-card .symbol {
+      font-size: 2rem;
+      line-height: 1;
+      color: var(--piece-color);
+    }
+
+    .piece-card .label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .piece-card.selected .label {
+      color: var(--accent);
+    }
+
+    /* ============================================================
+       BOARD WRAPPER & LAYOUT
+    ============================================================ */
+    .board-wrapper {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+    }
+
+    /* Row labels (1–8) */
+    .rank-labels, .file-labels-row {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+    }
+
+    .rank-labels {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      height: var(--board-size);
+      padding: 0 6px 0 0;
+    }
+
+    .rank-labels span {
+      height: var(--cell);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .file-labels-row {
+      display: flex;
+      padding: 6px 0 0 0;
+      margin-left: calc(0.75rem + 12px); /* align with board */
+    }
+
+    .file-labels-row span {
+      width: var(--cell);
+      text-align: center;
+    }
+
+    /* ============================================================
+       CHESS BOARD
+    ============================================================ */
+    .board-container {
+      position: relative;
+      width: var(--board-size);
+      height: var(--board-size);
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 2px #A08050,
+        0 0 0 4px #C4A870,
+        0 8px 40px var(--board-shadow);
+    }
+
+    .board-grid {
+      display: grid;
+      grid-template-columns: repeat(8, var(--cell));
+      grid-template-rows: repeat(8, var(--cell));
+      width: 100%;
+      height: 100%;
+    }
+
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      position: relative;
+      cursor: crosshair;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: filter 0.1s;
+    }
+
+    .cell.light { background: var(--board-light); }
+    .cell.dark  { background: var(--board-dark);  }
+
+    .cell:hover { filter: brightness(1.06); }
+
+    /* Placed piece */
+    .cell .piece-on-board {
+      font-size: calc(var(--cell) * 0.68);
+      line-height: 1;
+      color: #1a1a1a;
+      text-shadow:
+        0 1px 0 rgba(255,255,255,0.6),
+        0 2px 6px rgba(0,0,0,0.35);
+      pointer-events: none;
+      z-index: 2;
+      position: relative;
+      animation: dropIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    @keyframes dropIn {
+      from { transform: scale(0.6) translateY(-6px); opacity: 0; }
+      to   { transform: scale(1)   translateY(0);    opacity: 1; }
+    }
+
+    /* Highlighted squares */
+    .cell .move-dot {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .cell .move-dot::after {
+      content: '';
+      width: 30%;
+      height: 30%;
+      border-radius: 50%;
+      background: var(--dot-move);
+      box-shadow: 0 0 0 2px var(--ring-move);
+    }
+
+    .cell.highlighted-capture .move-dot::after {
+      background: var(--dot-capture);
+      box-shadow: 0 0 0 2px var(--ring-capture);
+    }
+
+    /* Occupied-square ring (piece is there, move overlaps) */
+    .cell.highlighted-move.has-piece .move-dot::after,
+    .cell.highlighted-capture.has-piece .move-dot::after {
+      width: 85%;
+      height: 85%;
+      border-radius: 50%;
+      background: transparent;
+      box-shadow: 0 0 0 3px var(--ring-move) inset;
+    }
+
+    .cell.highlighted-capture.has-piece .move-dot::after {
+      box-shadow: 0 0 0 3px var(--ring-capture) inset;
+    }
+
+    /* Placed-piece square glow */
+    .cell.piece-square::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(var(--accent-rgb), 0.18);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* SVG Arrow overlay */
+    #arrow-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      overflow: visible;
+    }
+
+    /* ============================================================
+       STATUS BAR
+    ============================================================ */
+    .status-bar {
+      margin-top: 20px;
+      min-height: 28px;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-style: italic;
+      color: var(--text-secondary);
+      text-align: center;
+      transition: opacity 0.3s;
+      max-width: var(--board-size);
+    }
+
+    .status-bar strong {
+      font-style: normal;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* ============================================================
+       LEGEND
+    ============================================================ */
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-top: 16px;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .legend.visible { opacity: 1; }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .legend-dot.move    { background: var(--dot-move);    box-shadow: 0 0 0 1.5px var(--ring-move); }
+    .legend-dot.capture { background: var(--dot-capture); box-shadow: 0 0 0 1.5px var(--ring-capture); }
+
+    /* ============================================================
+       FOOTER
+    ============================================================ */
+    footer {
+      margin-top: 48px;
+      font-size: 0.72rem;
+      color: #bbb;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       HEADER
+  ============================================================ -->
+  <header>
+    <h1>Chess <em>Moves</em></h1>
+    <p>Select a piece below, then click anywhere on the board to place it.</p>
+  </header>
+
+  <!-- ============================================================
+       PIECE SELECTOR
+  ============================================================ -->
+  <div class="piece-selector" id="piece-selector" role="listbox" aria-label="Chess piece selector">
+    <!-- Cards injected by JS -->
+  </div>
+
+  <!-- ============================================================
+       BOARD
+  ============================================================ -->
+  <div class="board-wrapper">
+    <div class="rank-labels" id="rank-labels" aria-hidden="true"></div>
+    <div>
+      <div class="board-container">
+        <div class="board-grid" id="board" role="grid" aria-label="Chess board"></div>
+        <svg id="arrow-overlay" viewBox="0 0 1 1" preserveAspectRatio="none">
+          <defs>
+            <marker id="arrowhead-move"
+              markerWidth="6" markerHeight="6"
+              refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="rgba(59,130,246,0.85)" />
+            </marker>
+            <marker id="arrowhead-capture"
+              markerWidth="6" markerHeight="6"
+              refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="rgba(239,68,68,0.85)" />
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <div class="file-labels-row" id="file-labels" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-bar" id="status-bar" aria-live="polite">
+    Choose a piece above to get started.
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend" id="legend">
+    <div class="legend-item">
+      <div class="legend-dot move"></div>
+      <span>Movement</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot capture"></div>
+      <span>Capture only</span>
+    </div>
+  </div>
+
+  <footer>Chess Moves &mdash; An interactive learning tool</footer>
+
+  <!-- ============================================================
+       JAVASCRIPT ENGINE
+       Architecture:
+         PIECES_CONFIG   — data-driven piece definitions
+         MoveEngine      — pure move-computation functions
+         BoardRenderer   — DOM mutation layer (no logic)
+         AppState        — single source of truth
+         EventController — wires DOM events to state transitions
+  ============================================================ -->
+  <script>
+  (() => {
+    'use strict';
+
+    /* =========================================================
+       1. UTILITIES
+    ========================================================= */
+    const inBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+
+    /* =========================================================
+       2. MOVE ENGINE
+       Each piece returns { moves: [{r, c, type}], arrows: [{from, to, type}] }
+       type: 'move' | 'capture'
+    ========================================================= */
+    const MoveEngine = {
+
+      /**
+       * Compute sliding-piece moves (rook, bishop, queen).
+       * Returns one arrow per direction (to farthest reachable square),
+       * but highlights ALL squares along the ray.
+       */
+      slidingMoves(r, c, directions) {
+        const moves = [], arrows = [];
+        for (const [dr, dc] of directions) {
+          let nr = r + dr, nc = c + dc;
+          let farthest = null;
+          while (inBounds(nr, nc)) {
+            moves.push({ r: nr, c: nc, type: 'move' });
+            farthest = { r: nr, c: nc };
+            nr += dr;
+            nc += dc;
+          }
+          if (farthest) {
+            arrows.push({ from: { r, c }, to: farthest, type: 'move' });
+          }
+        }
+        return { moves, arrows };
+      },
+
+      /**
+       * Compute jumping-piece moves (king, knight).
+       * One arrow per reachable square.
+       */
+      jumpMoves(r, c, offsets) {
+        const moves = [], arrows = [];
+        for (const [dr, dc] of offsets) {
+          const nr = r + dr, nc = c + dc;
+          if (inBounds(nr, nc)) {
+            moves.push({ r: nr, c: nc, type: 'move' });
+            arrows.push({ from: { r, c }, to: { r: nr, c: nc }, type: 'move' });
+          }
+        }
+        return { moves, arrows };
+      },
+    };
+
+    /* =========================================================
+       3. PIECES CONFIG
+       Centralised, data-driven definitions. To add a new piece,
+       add a new entry here — zero changes required elsewhere.
+    ========================================================= */
+    const PIECES_CONFIG = [
+      {
+        id: 'king',
+        name: 'King',
+        symbol: '♔',
+        getMoves(r, c) {
+          const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+          return MoveEngine.jumpMoves(r, c, dirs);
+        },
+        // Returns { bold, rest } — rendered safely via textContent in setStatus()
+        statusText(_r, _c) {
+          return { bold: 'King', rest: ' moves one square in any direction.' };
+        },
+      },
+      {
+        id: 'queen',
+        name: 'Queen',
+        symbol: '♕',
+        getMoves(r, c) {
+          const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+          return MoveEngine.slidingMoves(r, c, dirs);
+        },
+        statusText() {
+          return { bold: 'Queen', rest: ' slides any number of squares in all 8 directions — the most powerful piece.' };
+        },
+      },
+      {
+        id: 'rook',
+        name: 'Rook',
+        symbol: '♖',
+        getMoves(r, c) {
+          const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+          return MoveEngine.slidingMoves(r, c, dirs);
+        },
+        statusText() {
+          return { bold: 'Rook', rest: ' slides any number of squares horizontally or vertically.' };
+        },
+      },
+      {
+        id: 'bishop',
+        name: 'Bishop',
+        symbol: '♗',
+        getMoves(r, c) {
+          const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+          return MoveEngine.slidingMoves(r, c, dirs);
+        },
+        statusText() {
+          return { bold: 'Bishop', rest: ' slides any number of squares diagonally — it always stays on one color.' };
+        },
+      },
+      {
+        id: 'knight',
+        name: 'Knight',
+        symbol: '♘',
+        getMoves(r, c) {
+          const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+          return MoveEngine.jumpMoves(r, c, offsets);
+        },
+        statusText() {
+          return { bold: 'Knight', rest: ' jumps in an L-shape (2 + 1 squares) and can leap over other pieces.' };
+        },
+      },
+      {
+        id: 'pawn',
+        name: 'Pawn',
+        symbol: '♙',
+        getMoves(r, c) {
+          const moves = [], arrows = [];
+
+          // Forward movement (upward = decreasing row index)
+          if (inBounds(r - 1, c)) {
+            moves.push({ r: r - 1, c, type: 'move' });
+            arrows.push({ from: { r, c }, to: { r: r - 1, c }, type: 'move' });
+          }
+          // Two squares forward from starting rank (row 6 in 0-indexed top-down)
+          if (r === 6 && inBounds(r - 2, c)) {
+            moves.push({ r: r - 2, c, type: 'move' });
+            arrows.push({ from: { r, c }, to: { r: r - 2, c }, type: 'move' });
+          }
+
+          // Diagonal captures
+          for (const dc of [-1, 1]) {
+            const nc = c + dc;
+            if (inBounds(r - 1, nc)) {
+              moves.push({ r: r - 1, c: nc, type: 'capture' });
+            }
+          }
+
+          return { moves, arrows };
+        },
+        statusText(r, _c) {
+          const startNote = r === 6 ? ' From its starting rank, it can also move 2 squares.' : '';
+          return { bold: 'Pawn', rest: ` moves one square forward and captures diagonally.${startNote}` };
+        },
+      },
+    ];
+
+    // Quick lookup by id
+    const PIECES_MAP = Object.fromEntries(PIECES_CONFIG.map(p => [p.id, p]));
+
+    /* =========================================================
+       4. APP STATE  (single source of truth)
+    ========================================================= */
+    const AppState = {
+      selectedPieceId: null,   // string | null
+      placedAt: null,           // { r, c } | null
+    };
+
+    /* =========================================================
+       5. BOARD RENDERER
+       Pure DOM operations — reads AppState, writes DOM.
+    ========================================================= */
+    const BoardRenderer = {
+      cells: [],   // 8x8 array of <div> elements
+
+      /** Build the 8×8 grid once on init. */
+      buildGrid() {
+        const boardEl = document.getElementById('board');
+        this.cells = [];
+
+        for (let r = 0; r < 8; r++) {
+          this.cells[r] = [];
+          for (let c = 0; c < 8; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+            cell.dataset.r = r;
+            cell.dataset.c = c;
+            cell.setAttribute('role', 'gridcell');
+            cell.setAttribute('aria-label', `${String.fromCharCode(97 + c)}${8 - r}`);
+            boardEl.appendChild(cell);
+            this.cells[r][c] = cell;
+          }
+        }
+      },
+
+      /** Clear all highlights, pieces, and arrows from the board. */
+      clearBoard() {
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const cell = this.cells[r][c];
+            // ✅ replaceChildren() is the safe, modern way to clear child nodes
+            cell.replaceChildren();
+            cell.classList.remove(
+              'highlighted-move', 'highlighted-capture',
+              'has-piece', 'piece-square'
+            );
+          }
+        }
+        this.clearArrows();
+      },
+
+      /** Render the placed piece + its move highlights + arrows. */
+      render(pieceConfig, placedR, placedC) {
+        this.clearBoard();
+
+        // Draw highlights first
+        const { moves, arrows } = pieceConfig.getMoves(placedR, placedC);
+        for (const { r, c, type } of moves) {
+          const cell = this.cells[r][c];
+          cell.classList.add(type === 'capture' ? 'highlighted-capture' : 'highlighted-move');
+          const dot = document.createElement('div');
+          dot.className = 'move-dot';
+          cell.appendChild(dot);
+        }
+
+        // Draw arrows
+        this.drawArrows(arrows);
+
+        // Draw the piece on top
+        const pieceCell = this.cells[placedR][placedC];
+        pieceCell.classList.add('piece-square');
+        const pieceEl = document.createElement('span');
+        pieceEl.className = 'piece-on-board';
+        pieceEl.textContent = pieceConfig.symbol;
+        pieceCell.appendChild(pieceEl);
+      },
+
+      /** Draw SVG arrows over the board. */
+      drawArrows(arrows) {
+        const svg = document.getElementById('arrow-overlay');
+        // Remove old arrows (keep defs)
+        svg.querySelectorAll('line, path.arrow').forEach(el => el.remove());
+
+        const cellPx = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue('--cell')
+        );
+        const SHRINK = 0.28; // shorten arrow so tip lands inside destination cell
+
+        for (const { from, to, type } of arrows) {
+          // Center coordinates in pixels
+          const x1 = from.c * cellPx + cellPx / 2;
+          const y1 = from.r * cellPx + cellPx / 2;
+          const x2 =   to.c * cellPx + cellPx / 2;
+          const y2 =   to.r * cellPx + cellPx / 2;
+
+          // Shorten: move endpoints away from pure centers for aesthetics
+          const dx = x2 - x1, dy = y2 - y1;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          const ux = dx / len, uy = dy / len;
+
+          const startOffset = cellPx * 0.22;
+          const endOffset   = cellPx * SHRINK;
+
+          const sx = x1 + ux * startOffset;
+          const sy = y1 + uy * startOffset;
+          const ex = x2 - ux * endOffset;
+          const ey = y2 - uy * endOffset;
+
+          const color   = type === 'capture' ? 'rgba(239,68,68,0.75)'  : 'rgba(59,130,246,0.75)';
+          const markerId = type === 'capture' ? 'arrowhead-capture'     : 'arrowhead-move';
+          const strokeW = Math.max(1.5, cellPx * 0.045);
+
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', sx);
+          line.setAttribute('y1', sy);
+          line.setAttribute('x2', ex);
+          line.setAttribute('y2', ey);
+          line.setAttribute('stroke', color);
+          line.setAttribute('stroke-width', strokeW);
+          line.setAttribute('stroke-linecap', 'round');
+          line.setAttribute('marker-end', `url(#${markerId})`);
+          svg.appendChild(line);
+        }
+      },
+
+      clearArrows() {
+        const svg = document.getElementById('arrow-overlay');
+        svg.querySelectorAll('line').forEach(el => el.remove());
+      },
+    };
+
+    /* =========================================================
+       6. PIECE SELECTOR RENDERER
+    ========================================================= */
+    function renderPieceSelector() {
+      const container = document.getElementById('piece-selector');
+      for (const piece of PIECES_CONFIG) {
+        const card = document.createElement('div');
+        card.className = 'piece-card';
+        card.dataset.id = piece.id;
+        card.setAttribute('role', 'option');
+        card.setAttribute('aria-label', piece.name);
+
+        // ✅ Safe: textContent only — no innerHTML, no XSS vector
+        const symbolEl = document.createElement('span');
+        symbolEl.className = 'symbol';
+        symbolEl.setAttribute('aria-hidden', 'true');
+        symbolEl.textContent = piece.symbol;
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'label';
+        labelEl.textContent = piece.name;
+
+        card.appendChild(symbolEl);
+        card.appendChild(labelEl);
+        container.appendChild(card);
+      }
+    }
+
+    /* =========================================================
+       7. BOARD LABELS
+    ========================================================= */
+    function renderLabels() {
+      const rankEl = document.getElementById('rank-labels');
+      for (let r = 0; r < 8; r++) {
+        const span = document.createElement('span');
+        span.textContent = 8 - r;
+        rankEl.appendChild(span);
+      }
+
+      const fileEl = document.getElementById('file-labels');
+      for (let c = 0; c < 8; c++) {
+        const span = document.createElement('span');
+        span.textContent = String.fromCharCode(97 + c); // a–h
+        fileEl.appendChild(span);
+      }
+    }
+
+    /* =========================================================
+       8. STATUS BAR
+    ========================================================= */
+    /**
+     * Safely renders a status message using DOM methods only — no innerHTML.
+     * Accepts either a plain string or a { bold, rest } object.
+     * ✅ XSS-safe: all content written via textContent, never innerHTML.
+     */
+    function setStatus(msg) {
+      const el = document.getElementById('status-bar');
+      el.textContent = ''; // clear
+
+      if (typeof msg === 'string') {
+        el.textContent = msg;
+      } else {
+        // { bold: string, rest: string }
+        const prefix = document.createTextNode('The ');
+        const strong = document.createElement('strong');
+        strong.textContent = msg.bold;          // safe
+        const rest = document.createTextNode(msg.rest); // safe
+        el.appendChild(prefix);
+        el.appendChild(strong);
+        el.appendChild(rest);
+      }
+    }
+
+    /**
+     * Safe status for selection state (plain bold + text).
+     * ✅ Uses textContent throughout.
+     */
+    function setSelectionStatus(pieceName, suffix) {
+      const el = document.getElementById('status-bar');
+      el.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = pieceName;
+      el.appendChild(strong);
+      el.appendChild(document.createTextNode(suffix));
+    }
+
+    function toggleLegend(visible, hasPawn = false) {
+      const el = document.getElementById('legend');
+      el.classList.toggle('visible', visible);
+      // Only show capture legend when pawn is placed
+      const captureItem = el.querySelectorAll('.legend-item')[1];
+      if (captureItem) captureItem.style.display = hasPawn ? 'flex' : 'none';
+    }
+
+    /* =========================================================
+       9. EVENT CONTROLLER
+       Wires user interactions → state transitions → rendering.
+    ========================================================= */
+    const EventController = {
+
+      init() {
+        this.bindPieceSelector();
+        this.bindBoardClicks();
+      },
+
+      /** Piece card click → select piece, clear board. */
+      bindPieceSelector() {
+        document.getElementById('piece-selector').addEventListener('click', e => {
+          const card = e.target.closest('.piece-card');
+          if (!card) return;
+
+          const pieceId = card.dataset.id;
+
+          // ✅ Fix 4: Allowlist validation — only accept known piece IDs
+          if (!Object.prototype.hasOwnProperty.call(PIECES_MAP, pieceId)) return;
+
+          // Deselect if same piece clicked again
+          if (AppState.selectedPieceId === pieceId) {
+            AppState.selectedPieceId = null;
+            AppState.placedAt = null;
+            document.querySelectorAll('.piece-card').forEach(c => c.classList.remove('selected'));
+            BoardRenderer.clearBoard();
+            setStatus('Choose a piece above to get started.');
+            toggleLegend(false);
+            return;
+          }
+
+          AppState.selectedPieceId = pieceId;
+          AppState.placedAt = null;
+
+          // Update card UI
+          document.querySelectorAll('.piece-card').forEach(c => {
+            c.classList.toggle('selected', c.dataset.id === pieceId);
+          });
+
+          // Clear board
+          BoardRenderer.clearBoard();
+          toggleLegend(false);
+
+          const piece = PIECES_MAP[pieceId];
+          setSelectionStatus(piece.name, ' selected — click any square to place it.');
+        });
+      },
+
+      /** Board cell click → place piece, compute & render moves. */
+      bindBoardClicks() {
+        document.getElementById('board').addEventListener('click', e => {
+          const cell = e.target.closest('.cell');
+          if (!cell) return;
+
+          if (!AppState.selectedPieceId) {
+            setStatus('Select a piece above first.');
+            return;
+          }
+
+          const r = parseInt(cell.dataset.r, 10);
+          const c = parseInt(cell.dataset.c, 10);
+
+          // ✅ Fix 5: Bounds validation — reject NaN or out-of-range coordinates
+          if (!Number.isInteger(r) || !Number.isInteger(c) || !inBounds(r, c)) return;
+
+          // Clicking the same square clears the piece
+          if (AppState.placedAt && AppState.placedAt.r === r && AppState.placedAt.c === c) {
+            AppState.placedAt = null;
+            BoardRenderer.clearBoard();
+            const piece = PIECES_MAP[AppState.selectedPieceId];
+            setSelectionStatus(piece.name, ' selected — click any square to place it.');
+            toggleLegend(false);
+            return;
+          }
+
+          AppState.placedAt = { r, c };
+          const piece = PIECES_MAP[AppState.selectedPieceId];
+          BoardRenderer.render(piece, r, c);
+
+          // Update status with piece-specific structured text
+          setStatus(piece.statusText(r, c));
+
+          // Show legend; only show capture row for pawns
+          toggleLegend(true, AppState.selectedPieceId === 'pawn');
+        });
+      },
+    };
+
+    /* =========================================================
+       10. SVG VIEWPORT — keep it synced with board pixel size
+    ========================================================= */
+    function syncSvgViewport() {
+      const boardSize = document.getElementById('board').offsetWidth;
+      const svg = document.getElementById('arrow-overlay');
+      svg.setAttribute('viewBox', `0 0 ${boardSize} ${boardSize}`);
+      svg.setAttribute('width', boardSize);
+      svg.setAttribute('height', boardSize);
+    }
+
+    /* =========================================================
+       11. BOOTSTRAP
+    ========================================================= */
+    function init() {
+      renderPieceSelector();
+      renderLabels();
+      BoardRenderer.buildGrid();
+      EventController.init();
+      syncSvgViewport();
+
+      // Re-sync on resize and re-render if piece placed
+      window.addEventListener('resize', () => {
+        syncSvgViewport();
+        if (AppState.selectedPieceId && AppState.placedAt) {
+          const piece = PIECES_MAP[AppState.selectedPieceId];
+          const { r, c } = AppState.placedAt;
+          BoardRenderer.render(piece, r, c);
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+  })();
+  </script>
+</body>
+</html>
