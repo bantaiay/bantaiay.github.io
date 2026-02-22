@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#F8F6F1" />
   <title>Chess Moves — Learn to Play</title>
 
   <!--
@@ -56,8 +57,6 @@
       --dot-capture:    rgba(239, 68, 68, 0.55);
       --ring-move:      rgba(59, 130, 246, 0.85);
       --ring-capture:   rgba(239, 68, 68, 0.85);
-      --arrow-move:     rgba(59, 130, 246, 0.75);
-      --arrow-capture:  rgba(239, 68, 68, 0.75);
 
       --text-primary:   #1a1a18;
       --text-secondary: #7a7060;
@@ -68,8 +67,11 @@
       --font-display:   Georgia, 'Times New Roman', Times, serif;
       --font-ui:        system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-      /* Board cell size — responsive */
-      --cell: clamp(44px, 10vw, 64px);
+      /* Board cell size — responsive
+         Formula: (100vw - body-padding×2 - rank-label-col) / 8
+         52px = 16px left padding + 16px right padding + ~20px rank label column.
+         clamp floor 36px ensures the board fits even on a 320px (iPhone SE) screen. */
+      --cell: clamp(36px, calc((100vw - 52px) / 8), 64px);
       --board-size: calc(var(--cell) * 8);
     }
 
@@ -86,8 +88,19 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 32px 16px 64px;
+      /* Base padding — overridden below with safe-area-inset for notched iPhones */
+      padding-top: 32px;
+      padding-bottom: 64px;
+      padding-left: 16px;
+      padding-right: 16px;
+      /* Safe-area insets: written as individual properties so iOS Safari
+         parses them reliably. Fallback (16px) used on non-notched devices. */
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
       gap: 0;
+      /* Prevents the Android/iOS pull-to-refresh gesture from firing when
+         the user swipes down on the board */
+      overscroll-behavior-y: contain;
     }
 
     /* ============================================================
@@ -149,6 +162,13 @@
       flex: 1 1 72px;
       min-width: 72px;
       max-width: 100px;
+      /* Mobile: Apple HIG minimum tap target is 44pt; 64px gives comfortable margin */
+      min-height: 64px;
+      /* Lets the browser register taps immediately without waiting to
+         determine if the gesture is a scroll — eliminates tap delay */
+      touch-action: manipulation;
+      /* Removes the semi-transparent grey overlay iOS shows on tap */
+      -webkit-tap-highlight-color: transparent;
     }
 
     .piece-card:hover {
@@ -257,6 +277,10 @@
       align-items: center;
       justify-content: center;
       transition: filter 0.1s;
+      /* Prevents scroll gesture from swallowing taps on the board */
+      touch-action: manipulation;
+      /* Removes iOS grey flash on tap */
+      -webkit-tap-highlight-color: transparent;
     }
 
     .cell.light { background: var(--board-light); }
@@ -332,15 +356,6 @@
       z-index: 0;
     }
 
-    /* SVG Arrow overlay */
-    #arrow-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 10;
-      overflow: visible;
-    }
-
     /* ============================================================
        STATUS BAR
     ============================================================ */
@@ -402,6 +417,72 @@
       color: #bbb;
       letter-spacing: 0.04em;
     }
+
+    /* ============================================================
+       MOBILE — small screens (≤ 480px)
+       Tightens spacing and reduces font sizes to fit comfortably.
+    ============================================================ */
+    @media (max-width: 480px) {
+      body {
+        padding-top: 20px;
+        padding-bottom: 40px;
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      header p {
+        font-size: 0.8rem;
+      }
+
+      .piece-selector {
+        gap: 7px;
+        margin-bottom: 20px;
+      }
+
+      .piece-card {
+        min-width: 60px;
+        max-width: 80px;
+        min-height: 58px;
+        padding: 8px;
+      }
+
+      .piece-card .symbol {
+        font-size: 1.7rem;
+      }
+
+      .piece-card .label {
+        font-size: 0.6rem;
+      }
+
+      .status-bar {
+        font-size: 0.92rem;
+        padding: 0 8px;
+      }
+    }
+
+    /* ============================================================
+       MOBILE — very narrow screens (≤ 380px, e.g. iPhone SE 1st gen)
+       Hides rank/file labels entirely to give the board maximum
+       horizontal space. --cell recalculates using the freed-up width.
+    ============================================================ */
+    @media (max-width: 380px) {
+      html {
+        /* No rank-label column — use full width minus padding only */
+        --cell: clamp(34px, calc((100vw - 36px) / 8), 64px);
+      }
+
+      .rank-labels,
+      .file-labels-row {
+        display: none;
+      }
+
+      .board-wrapper {
+        justify-content: center;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -429,20 +510,6 @@
     <div>
       <div class="board-container">
         <div class="board-grid" id="board" role="grid" aria-label="Chess board"></div>
-        <svg id="arrow-overlay" viewBox="0 0 1 1" preserveAspectRatio="none">
-          <defs>
-            <marker id="arrowhead-move"
-              markerWidth="6" markerHeight="6"
-              refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="rgba(59,130,246,0.85)" />
-            </marker>
-            <marker id="arrowhead-capture"
-              markerWidth="6" markerHeight="6"
-              refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="rgba(239,68,68,0.85)" />
-            </marker>
-          </defs>
-        </svg>
       </div>
       <div class="file-labels-row" id="file-labels" aria-hidden="true"></div>
     </div>
@@ -467,7 +534,7 @@
 
   <footer>Chess Moves &mdash; An interactive learning tool</footer>
 
-  <!-- ============================================================
+  <!--
        JAVASCRIPT ENGINE
        Architecture:
          PIECES_CONFIG   — data-driven piece definitions
@@ -475,7 +542,7 @@
          BoardRenderer   — DOM mutation layer (no logic)
          AppState        — single source of truth
          EventController — wires DOM events to state transitions
-  ============================================================ -->
+  -->
   <script>
   (() => {
     'use strict';
@@ -494,41 +561,33 @@
 
       /**
        * Compute sliding-piece moves (rook, bishop, queen).
-       * Returns one arrow per direction (to farthest reachable square),
-       * but highlights ALL squares along the ray.
+       * Highlights ALL squares along each ray direction.
        */
       slidingMoves(r, c, directions) {
-        const moves = [], arrows = [];
+        const moves = [];
         for (const [dr, dc] of directions) {
           let nr = r + dr, nc = c + dc;
-          let farthest = null;
           while (inBounds(nr, nc)) {
             moves.push({ r: nr, c: nc, type: 'move' });
-            farthest = { r: nr, c: nc };
             nr += dr;
             nc += dc;
           }
-          if (farthest) {
-            arrows.push({ from: { r, c }, to: farthest, type: 'move' });
-          }
         }
-        return { moves, arrows };
+        return { moves };
       },
 
       /**
        * Compute jumping-piece moves (king, knight).
-       * One arrow per reachable square.
        */
       jumpMoves(r, c, offsets) {
-        const moves = [], arrows = [];
+        const moves = [];
         for (const [dr, dc] of offsets) {
           const nr = r + dr, nc = c + dc;
           if (inBounds(nr, nc)) {
             moves.push({ r: nr, c: nc, type: 'move' });
-            arrows.push({ from: { r, c }, to: { r: nr, c: nc }, type: 'move' });
           }
         }
-        return { moves, arrows };
+        return { moves };
       },
     };
 
@@ -604,17 +663,15 @@
         name: 'Pawn',
         symbol: '♙',
         getMoves(r, c) {
-          const moves = [], arrows = [];
+          const moves = [];
 
           // Forward movement (upward = decreasing row index)
           if (inBounds(r - 1, c)) {
             moves.push({ r: r - 1, c, type: 'move' });
-            arrows.push({ from: { r, c }, to: { r: r - 1, c }, type: 'move' });
           }
           // Two squares forward from starting rank (row 6 in 0-indexed top-down)
           if (r === 6 && inBounds(r - 2, c)) {
             moves.push({ r: r - 2, c, type: 'move' });
-            arrows.push({ from: { r, c }, to: { r: r - 2, c }, type: 'move' });
           }
 
           // Diagonal captures
@@ -625,7 +682,7 @@
             }
           }
 
-          return { moves, arrows };
+          return { moves };
         },
         statusText(r, _c) {
           const startNote = r === 6 ? ' From its starting rank, it can also move 2 squares.' : '';
@@ -672,7 +729,7 @@
         }
       },
 
-      /** Clear all highlights, pieces, and arrows from the board. */
+      /** Clear all highlights and pieces from the board. */
       clearBoard() {
         for (let r = 0; r < 8; r++) {
           for (let c = 0; c < 8; c++) {
@@ -685,15 +742,14 @@
             );
           }
         }
-        this.clearArrows();
       },
 
-      /** Render the placed piece + its move highlights + arrows. */
+      /** Render the placed piece + its move highlights. */
       render(pieceConfig, placedR, placedC) {
         this.clearBoard();
 
-        // Draw highlights first
-        const { moves, arrows } = pieceConfig.getMoves(placedR, placedC);
+        // Draw move highlights
+        const { moves } = pieceConfig.getMoves(placedR, placedC);
         for (const { r, c, type } of moves) {
           const cell = this.cells[r][c];
           cell.classList.add(type === 'capture' ? 'highlighted-capture' : 'highlighted-move');
@@ -702,9 +758,6 @@
           cell.appendChild(dot);
         }
 
-        // Draw arrows
-        this.drawArrows(arrows);
-
         // Draw the piece on top
         const pieceCell = this.cells[placedR][placedC];
         pieceCell.classList.add('piece-square');
@@ -712,59 +765,6 @@
         pieceEl.className = 'piece-on-board';
         pieceEl.textContent = pieceConfig.symbol;
         pieceCell.appendChild(pieceEl);
-      },
-
-      /** Draw SVG arrows over the board. */
-      drawArrows(arrows) {
-        const svg = document.getElementById('arrow-overlay');
-        // Remove old arrows (keep defs)
-        svg.querySelectorAll('line, path.arrow').forEach(el => el.remove());
-
-        const cellPx = parseFloat(
-          getComputedStyle(document.documentElement).getPropertyValue('--cell')
-        );
-        const SHRINK = 0.28; // shorten arrow so tip lands inside destination cell
-
-        for (const { from, to, type } of arrows) {
-          // Center coordinates in pixels
-          const x1 = from.c * cellPx + cellPx / 2;
-          const y1 = from.r * cellPx + cellPx / 2;
-          const x2 =   to.c * cellPx + cellPx / 2;
-          const y2 =   to.r * cellPx + cellPx / 2;
-
-          // Shorten: move endpoints away from pure centers for aesthetics
-          const dx = x2 - x1, dy = y2 - y1;
-          const len = Math.sqrt(dx * dx + dy * dy) || 1;
-          const ux = dx / len, uy = dy / len;
-
-          const startOffset = cellPx * 0.22;
-          const endOffset   = cellPx * SHRINK;
-
-          const sx = x1 + ux * startOffset;
-          const sy = y1 + uy * startOffset;
-          const ex = x2 - ux * endOffset;
-          const ey = y2 - uy * endOffset;
-
-          const color   = type === 'capture' ? 'rgba(239,68,68,0.75)'  : 'rgba(59,130,246,0.75)';
-          const markerId = type === 'capture' ? 'arrowhead-capture'     : 'arrowhead-move';
-          const strokeW = Math.max(1.5, cellPx * 0.045);
-
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          line.setAttribute('x1', sx);
-          line.setAttribute('y1', sy);
-          line.setAttribute('x2', ex);
-          line.setAttribute('y2', ey);
-          line.setAttribute('stroke', color);
-          line.setAttribute('stroke-width', strokeW);
-          line.setAttribute('stroke-linecap', 'round');
-          line.setAttribute('marker-end', `url(#${markerId})`);
-          svg.appendChild(line);
-        }
-      },
-
-      clearArrows() {
-        const svg = document.getElementById('arrow-overlay');
-        svg.querySelectorAll('line').forEach(el => el.remove());
       },
     };
 
@@ -953,14 +953,20 @@
     };
 
     /* =========================================================
-       10. SVG VIEWPORT — keep it synced with board pixel size
+       10. UTILITIES — general purpose helpers
     ========================================================= */
-    function syncSvgViewport() {
-      const boardSize = document.getElementById('board').offsetWidth;
-      const svg = document.getElementById('arrow-overlay');
-      svg.setAttribute('viewBox', `0 0 ${boardSize} ${boardSize}`);
-      svg.setAttribute('width', boardSize);
-      svg.setAttribute('height', boardSize);
+    /**
+     * debounce(fn, ms)
+     * Returns a wrapper that delays invoking fn until ms milliseconds
+     * have elapsed since the last call. Prevents resize from triggering
+     * a full board re-render hundreds of times per second on mobile.
+     */
+    function debounce(fn, ms) {
+      let timer = null;
+      return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), ms);
+      };
     }
 
     /* =========================================================
@@ -971,17 +977,19 @@
       renderLabels();
       BoardRenderer.buildGrid();
       EventController.init();
-      syncSvgViewport();
 
-      // Re-sync on resize and re-render if piece placed
-      window.addEventListener('resize', () => {
-        syncSvgViewport();
+      // Re-render on resize if a piece is placed.
+      // Debounced at 100ms — smooth on desktop, prevents jank on mobile
+      // when rotating the device fires many rapid resize events.
+      const handleResize = debounce(() => {
         if (AppState.selectedPieceId && AppState.placedAt) {
           const piece = PIECES_MAP[AppState.selectedPieceId];
           const { r, c } = AppState.placedAt;
           BoardRenderer.render(piece, r, c);
         }
-      });
+      }, 100);
+
+      window.addEventListener('resize', handleResize);
     }
 
     document.addEventListener('DOMContentLoaded', init);
